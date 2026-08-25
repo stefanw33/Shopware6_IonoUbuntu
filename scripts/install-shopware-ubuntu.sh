@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_ROOT="${APP_ROOT:-/var/www/shopware}"
-DOMAIN="${DOMAIN:-shop.example.com}"
+APP_ROOT="${APP_ROOT:-/var/www/vps.projectvision.de}"
+DOMAIN="${DOMAIN:-sw.projectvision.de}"
 DB_NAME="${DB_NAME:-shopware}"
 DB_USER="${DB_USER:-shopware}"
 DB_PASSWORD="${DB_PASSWORD:-StrongPassword123!}"
-PHP_VERSION="${PHP_VERSION:-8.2}"
+PHP_VERSION="${PHP_VERSION:-8.3}"
 
 echo "==> Updating system packages"
 sudo apt update
@@ -14,7 +14,6 @@ sudo apt upgrade -y
 
 echo "==> Installing required packages"
 sudo apt install -y \
-    apache2 \
     mariadb-server \
     php${PHP_VERSION}-fpm \
     php${PHP_VERSION}-cli \
@@ -34,7 +33,7 @@ sudo apt install -y \
     curl \
     git
 
-sudo a2enmod rewrite headers proxy proxy_fcgi setenvif ssl
+# Apache2 already exists and is active on the server. No Apache installation is required.
 
 echo "==> Configuring MariaDB"
 sudo mysql -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
@@ -52,31 +51,17 @@ cd "${APP_ROOT}"
 # Example for Composer-based installation:
 # composer create-project shopware/platform .
 
-echo "==> Creating Apache2 vhost"
-sudo tee /etc/apache2/sites-available/shopware.conf >/dev/null <<EOF
-<VirtualHost *:80>
-    ServerName ${DOMAIN}
-    DocumentRoot ${APP_ROOT}/public
+echo "==> Reusing existing Apache vhost"
+if [ -f /etc/apache2/sites-enabled/vps.projectvision.de.conf ]; then
+    echo "Using existing vhost: /etc/apache2/sites-enabled/vps.projectvision.de.conf"
+    grep -n "DocumentRoot" /etc/apache2/sites-enabled/vps.projectvision.de.conf || true
+else
+    echo "Missing expected Apache vhost file: /etc/apache2/sites-enabled/vps.projectvision.de.conf"
+    echo "Please verify your Apache configuration before continuing."
+fi
 
-    <Directory ${APP_ROOT}/public>
-        Options FollowSymLinks
-        AllowOverride All
-        Require all granted
-    </Directory>
-
-    <FilesMatch "\.php$">
-        SetHandler "proxy:unix:/run/php/php${PHP_VERSION}-fpm.sock|fcgi://localhost"
-    </FilesMatch>
-
-    ErrorLog ${APACHE_LOG_DIR}/shopware_error.log
-    CustomLog ${APACHE_LOG_DIR}/shopware_access.log combined
-</VirtualHost>
-EOF
-
-sudo a2dissite 000-default.conf || true
-sudo a2ensite shopware.conf
-sudo apache2ctl configtest
-sudo systemctl reload apache2
+sudo apache2ctl configtest || true
+sudo systemctl reload apache2 || true
 
 echo "==> Enabling PHP-FPM"
 sudo systemctl enable --now php${PHP_VERSION}-fpm

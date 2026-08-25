@@ -3,7 +3,7 @@
 Dieses Repository dient als Grundlage für die Installation von Shopware 6 auf einem Ubuntu-Server ohne Docker. Ziel ist eine klassische Webanwendung mit:
 
 - Ubuntu Server
-- Apache2
+- bereits vorhandener Apache2
 - PHP-FPM
 - MariaDB/MySQL
 - Composer
@@ -24,11 +24,11 @@ Shopware 6 soll wie eine normale Webanwendung auf dem Server laufen, nicht als D
 ## Empfohlene Server-Umgebung
 
 - Betriebssystem: Ubuntu 22.04 LTS
-- Webserver: Apache2
+- Webserver: bereits vorhandener Apache2
 - PHP: 8.2 oder 8.3 je nach Shopware-Version
 - Datenbank: MariaDB 10.6+
 - Cache/Queue: Redis optional
-- Dateisystem: `/var/www/shopware`
+- Dateisystem: `/var/www/vps.projectvision.de`
 
 ## Installationsschritte
 
@@ -39,24 +39,32 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install -y ca-certificates curl gnupg unzip git software-properties-common
 ```
 
-### 2) PHP, MariaDB und Apache2 installieren
+### 2) Nur PHP und MariaDB installieren
+
+Apache2 läuft bereits auf dem Server. Deshalb installieren wir nur die für Shopware benötigten PHP- und Datenbankpakete:
 
 ```bash
-sudo apt install -y apache2 mariadb-server php8.2-fpm php8.2-cli php8.2-mysql php8.2-xml php8.2-curl php8.2-gd php8.2-intl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-soap php8.2-redis php8.2-opcache composer
+sudo apt install -y mariadb-server php8.3-fpm php8.3-cli php8.3-mysql php8.3-xml php8.3-curl php8.3-gd php8.3-intl php8.3-mbstring php8.3-zip php8.3-bcmath php8.3-soap php8.3-redis php8.3-opcache composer
 ```
 
-Wenn PHP 8.2 nicht in den Paketquellen enthalten ist, alternativ:
+Wenn PHP 8.3 nicht in den Paketquellen enthalten ist, alternativ:
 
 ```bash
 sudo add-apt-repository ppa:ondrej/php
 sudo apt update
 ```
 
-Aktivieren der nötigen Apache2-Module:
+Prüfen, ob die vorhandenen Apache-Hosts bereits auf das Webroot zeigen:
 
 ```bash
-sudo a2enmod rewrite headers proxy proxy_fcgi setenvif ssl
-sudo systemctl restart apache2
+sudo apache2ctl -S
+ls -l /etc/apache2/sites-enabled/
+```
+
+In deinem Fall zeigt der vorhandene Host bereits auf:
+
+```text
+/var/www/vps.projectvision.de
 ```
 
 ### 3) MariaDB vorbereiten
@@ -78,9 +86,11 @@ EXIT;
 
 ### 4) Anwendung anlegen
 
+Da Apache bereits auf `/var/www/vps.projectvision.de` zeigt, nutzen wir dieses Verzeichnis als Shopware-Webroot:
+
 ```bash
-sudo mkdir -p /var/www/shopware
-sudo chown -R $USER:$USER /var/www/shopware
+sudo mkdir -p /var/www/vps.projectvision.de
+sudo chown -R $USER:$USER /var/www/vps.projectvision.de
 ```
 
 ### 5) Shopware herunterladen
@@ -90,87 +100,59 @@ Die bevorzugte Installationsweise ist der offizielle Shopware-Download oder das 
 Beispiel mit Composer:
 
 ```bash
-cd /var/www/shopware
+cd /var/www/vps.projectvision.de
 composer create-project shopware/platform .
 ```
 
 Falls der genaue Shopware-Release aus einem Download-Archiv stammt:
 
 ```bash
-cd /var/www/shopware
+cd /var/www/vps.projectvision.de
 sudo unzip shopware-*.zip
-sudo chown -R www-data:www-data /var/www/shopware
+sudo chown -R www-data:www-data /var/www/vps.projectvision.de
 ```
 
-### 6) Apache2 konfigurieren
+### 6) Vorhandene Apache-Host-Konfiguration nutzen
 
-Beispiel für einen VirtualHost mit PHP-FPM:
+Auf deinem Server läuft Apache bereits. Die vorhandenen Hosts zeigen bereits auf:
 
-```apache
-<VirtualHost *:80>
-    ServerName shop.example.com
-    DocumentRoot /var/www/shopware/public
-
-    <Directory /var/www/shopware/public>
-        Options FollowSymLinks
-        AllowOverride All
-        Require all granted
-    </Directory>
-
-    <FilesMatch "\.php$">
-        SetHandler "proxy:unix:/run/php/php8.2-fpm.sock|fcgi://localhost"
-    </FilesMatch>
-
-    ErrorLog ${APACHE_LOG_DIR}/shopware_error.log
-    CustomLog ${APACHE_LOG_DIR}/shopware_access.log combined
-</VirtualHost>
+```text
+/var/www/vps.projectvision.de
 ```
 
-Aktivieren:
+Die vorhandene Hostdatei ist bereits aktiv:
+
+```text
+/etc/apache2/sites-enabled/vps.projectvision.de.conf
+```
+
+Die Shopware-Anwendung muss jetzt in dieses bestehende Webroot installiert werden, damit der Host automatisch auf `public` zeigt.
+
+Prüfen:
 
 ```bash
-sudo tee /etc/apache2/sites-available/shopware.conf >/dev/null <<'EOF'
-<VirtualHost *:80>
-    ServerName shop.example.com
-    DocumentRoot /var/www/shopware/public
-
-    <Directory /var/www/shopware/public>
-        Options FollowSymLinks
-        AllowOverride All
-        Require all granted
-    </Directory>
-
-    <FilesMatch "\.php$">
-        SetHandler "proxy:unix:/run/php/php8.2-fpm.sock|fcgi://localhost"
-    </FilesMatch>
-
-    ErrorLog ${APACHE_LOG_DIR}/shopware_error.log
-    CustomLog ${APACHE_LOG_DIR}/shopware_access.log combined
-</VirtualHost>
-EOF
-
-sudo a2dissite 000-default.conf
-sudo a2ensite shopware.conf
-sudo apache2ctl configtest
-sudo systemctl reload apache2
+sudo apache2ctl -S
+sudo grep -n "DocumentRoot" /etc/apache2/sites-enabled/vps.projectvision.de.conf
 ```
+
+Wenn das DocumentRoot korrekt auf `/var/www/vps.projectvision.de` zeigt, brauchen wir keine neue Apache-Installation und keine neue VHost-Datei. Nur das Shopware-Projekt wird in diesem Verzeichnis installiert.
 
 ### 7) PHP-FPM konfigurieren
 
 Prüfen, ob PHP-FPM läuft:
 
 ```bash
-sudo systemctl enable --now php8.2-fpm
-sudo systemctl status php8.2-fpm
+sudo systemctl enable --now php8.3-fpm
+sudo systemctl status php8.3-fpm
 ```
 
 ### 8) Dateirechte setzen
 
 ```bash
-sudo chown -R www-data:www-data /var/www/shopware
-sudo find /var/www/shopware -type d -exec chmod 755 {} \;
-sudo find /var/www/shopware -type f -exec chmod 644 {} \;
-sudo chmod -R 775 /var/www/shopware/var /var/www/shopware/public/media /var/www/shopware/files /var/www/shopware/config
+sudo chown -R www-data:www-data /var/www/vps.projectvision.de
+sudo find /var/www/vps.projectvision.de -type d -exec chmod 755 {} \;
+sudo find /var/www/vps.projectvision.de -type f -exec chmod 644 {} \;
+sudo chmod -R 775 /var/www/vps.projectvision.de/var /var/www/vps.projectvision.de/public/media /var/www/vps.projectvision.de/files /var/www/vps.projectvision.de/config
 ```
 
 ### 9) Shopware-Installer starten
@@ -178,7 +160,7 @@ sudo chmod -R 775 /var/www/shopware/var /var/www/shopware/public/media /var/www/
 Nach der Webserver-Konfiguration kann die Installation über die Domain im Browser gestartet werden:
 
 ```text
-https://shop.example.com
+https://sw.projectvision.de
 ```
 
 Dort werden die Datenbankparameter, Admin-Benutzer und die Konfiguration eingegeben.
@@ -188,7 +170,7 @@ Dort werden die Datenbankparameter, Admin-Benutzer und die Konfiguration eingege
 Empfohlene Schritte:
 
 ```bash
-cd /var/www/shopware
+cd /var/www/vps.projectvision.de
 php bin/console cache:clear
 php bin/console plugin:refresh
 php bin/console scheduled-task:run
@@ -214,7 +196,7 @@ custom/plugins/<Name>
 
 ## Projektstruktur
 
-Dieses Repository dient vor allem als Setup-Dokumentation und Automatisierungsbasis. Für die eigentliche Shopware-Installation wird der Code auf dem Ubuntu-Server in `/var/www/shopware` abgelegt.
+Dieses Repository dient vor allem als Setup-Dokumentation und Automatisierungsbasis. Für die eigentliche Shopware-Installation wird der Code auf dem Ubuntu-Server in `/var/www/vps.projectvision.de` abgelegt und dort über den vorhandenen Apache-Host ausgeliefert.
 
 ## Changelog
 

@@ -3,7 +3,7 @@
 Dieses Repository dient als Grundlage für die Installation von Shopware 6 auf einem Ubuntu-Server ohne Docker. Ziel ist eine klassische Webanwendung mit:
 
 - Ubuntu Server
-- Nginx oder Apache
+- Apache2
 - PHP-FPM
 - MariaDB/MySQL
 - Composer
@@ -24,7 +24,7 @@ Shopware 6 soll wie eine normale Webanwendung auf dem Server laufen, nicht als D
 ## Empfohlene Server-Umgebung
 
 - Betriebssystem: Ubuntu 22.04 LTS
-- Webserver: Nginx
+- Webserver: Apache2
 - PHP: 8.2 oder 8.3 je nach Shopware-Version
 - Datenbank: MariaDB 10.6+
 - Cache/Queue: Redis optional
@@ -39,10 +39,10 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install -y ca-certificates curl gnupg unzip git software-properties-common
 ```
 
-### 2) PHP, MariaDB und Nginx installieren
+### 2) PHP, MariaDB und Apache2 installieren
 
 ```bash
-sudo apt install -y nginx mariadb-server php8.2-fpm php8.2-cli php8.2-mysql php8.2-xml php8.2-curl php8.2-gd php8.2-intl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-soap php8.2-redis php8.2-opcache composer
+sudo apt install -y apache2 mariadb-server php8.2-fpm php8.2-cli php8.2-mysql php8.2-xml php8.2-curl php8.2-gd php8.2-intl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-soap php8.2-redis php8.2-opcache composer
 ```
 
 Wenn PHP 8.2 nicht in den Paketquellen enthalten ist, alternativ:
@@ -50,6 +50,13 @@ Wenn PHP 8.2 nicht in den Paketquellen enthalten ist, alternativ:
 ```bash
 sudo add-apt-repository ppa:ondrej/php
 sudo apt update
+```
+
+Aktivieren der nötigen Apache2-Module:
+
+```bash
+sudo a2enmod rewrite headers proxy proxy_fcgi setenvif ssl
+sudo systemctl restart apache2
 ```
 
 ### 3) MariaDB vorbereiten
@@ -95,45 +102,57 @@ sudo unzip shopware-*.zip
 sudo chown -R www-data:www-data /var/www/shopware
 ```
 
-### 6) Nginx konfigurieren
+### 6) Apache2 konfigurieren
 
-Beispiel für eine VHost-Datei:
+Beispiel für einen VirtualHost mit PHP-FPM:
 
-```nginx
-server {
-    listen 80;
-    server_name shop.example.com;
-    root /var/www/shopware/public;
-    index index.php index.html;
+```apache
+<VirtualHost *:80>
+    ServerName shop.example.com
+    DocumentRoot /var/www/shopware/public
 
-    access_log /var/log/nginx/shopware_access.log;
-    error_log /var/log/nginx/shopware_error.log;
+    <Directory /var/www/shopware/public>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
 
-    location / {
-        try_files $uri /index.php$is_args$args;
-    }
+    <FilesMatch "\.php$">
+        SetHandler "proxy:unix:/run/php/php8.2-fpm.sock|fcgi://localhost"
+    </FilesMatch>
 
-    location ~ \.php$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        try_files $uri =404;
-    }
-}
+    ErrorLog ${APACHE_LOG_DIR}/shopware_error.log
+    CustomLog ${APACHE_LOG_DIR}/shopware_access.log combined
+</VirtualHost>
 ```
 
 Aktivieren:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/shopware /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo tee /etc/apache2/sites-available/shopware.conf >/dev/null <<'EOF'
+<VirtualHost *:80>
+    ServerName shop.example.com
+    DocumentRoot /var/www/shopware/public
+
+    <Directory /var/www/shopware/public>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    <FilesMatch "\.php$">
+        SetHandler "proxy:unix:/run/php/php8.2-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    ErrorLog ${APACHE_LOG_DIR}/shopware_error.log
+    CustomLog ${APACHE_LOG_DIR}/shopware_access.log combined
+</VirtualHost>
+EOF
+
+sudo a2dissite 000-default.conf
+sudo a2ensite shopware.conf
+sudo apache2ctl configtest
+sudo systemctl reload apache2
 ```
 
 ### 7) PHP-FPM konfigurieren

@@ -14,7 +14,7 @@ sudo apt upgrade -y
 
 echo "==> Installing required packages"
 sudo apt install -y \
-    nginx \
+    apache2 \
     mariadb-server \
     php${PHP_VERSION}-fpm \
     php${PHP_VERSION}-cli \
@@ -34,6 +34,8 @@ sudo apt install -y \
     curl \
     git
 
+sudo a2enmod rewrite headers proxy proxy_fcgi setenvif ssl
+
 echo "==> Configuring MariaDB"
 sudo mysql -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 sudo mysql -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
@@ -50,31 +52,31 @@ cd "${APP_ROOT}"
 # Example for Composer-based installation:
 # composer create-project shopware/platform .
 
-echo "==> Creating nginx vhost"
-sudo tee /etc/nginx/sites-available/shopware >/dev/null <<EOF
-server {
-    listen 80;
-    server_name ${DOMAIN};
-    root ${APP_ROOT}/public;
-    index index.php index.html;
+echo "==> Creating Apache2 vhost"
+sudo tee /etc/apache2/sites-available/shopware.conf >/dev/null <<EOF
+<VirtualHost *:80>
+    ServerName ${DOMAIN}
+    DocumentRoot ${APP_ROOT}/public
 
-    location / {
-        try_files \$uri /index.php\$is_args\$args;
-    }
+    <Directory ${APP_ROOT}/public>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
 
-    location ~ \.php$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-    }
-}
+    <FilesMatch "\.php$">
+        SetHandler "proxy:unix:/run/php/php${PHP_VERSION}-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    ErrorLog ${APACHE_LOG_DIR}/shopware_error.log
+    CustomLog ${APACHE_LOG_DIR}/shopware_access.log combined
+</VirtualHost>
 EOF
 
-sudo ln -sf /etc/nginx/sites-available/shopware /etc/nginx/sites-enabled/shopware
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl restart nginx
+sudo a2dissite 000-default.conf || true
+sudo a2ensite shopware.conf
+sudo apache2ctl configtest
+sudo systemctl reload apache2
 
 echo "==> Enabling PHP-FPM"
 sudo systemctl enable --now php${PHP_VERSION}-fpm

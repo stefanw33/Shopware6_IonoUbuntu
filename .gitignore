@@ -1,0 +1,26 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Local environment
+.env
+.env.*
+
+# Composer / build artifacts
+/vendor/
+/node_modules/
+/var/
+/cache/
+/public/media/
+/files/
+
+# Logs
+*.log
+
+# Linux / server temporary files
+*.swp
+*.tmp

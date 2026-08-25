@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_ROOT="${APP_ROOT:-/var/www/vps.projectvision.de}"
+APP_ROOT="${APP_ROOT:-/var/www/shopware}"
 DOMAIN="${DOMAIN:-sw.projectvision.de}"
 DB_NAME="${DB_NAME:-shopware}"
 DB_USER="${DB_USER:-shopware}"
@@ -55,6 +55,7 @@ echo "==> Reusing existing Apache vhost"
 if [ -f /etc/apache2/sites-enabled/vps.projectvision.de.conf ]; then
     echo "Using existing vhost: /etc/apache2/sites-enabled/vps.projectvision.de.conf"
     grep -n "DocumentRoot" /etc/apache2/sites-enabled/vps.projectvision.de.conf || true
+    echo "IMPORTANT: update this vhost to DocumentRoot /var/www/shopware if it still points elsewhere."
 else
     echo "Missing expected Apache vhost file: /etc/apache2/sites-enabled/vps.projectvision.de.conf"
     echo "Please verify your Apache configuration before continuing."

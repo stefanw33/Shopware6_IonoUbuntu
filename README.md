@@ -28,7 +28,7 @@ Shopware 6 soll wie eine normale Webanwendung auf dem Server laufen, nicht als D
 - PHP: 8.2 oder 8.3 je nach Shopware-Version
 - Datenbank: MariaDB 10.6+
 - Cache/Queue: Redis optional
-- Dateisystem: `/var/www/vps.projectvision.de`
+- Dateisystem: `/var/www/shopware`
 
 ## Installationsschritte
 
@@ -86,11 +86,11 @@ EXIT;
 
 ### 4) Anwendung anlegen
 
-Da Apache bereits auf `/var/www/vps.projectvision.de` zeigt, nutzen wir dieses Verzeichnis als Shopware-Webroot:
+In diesem Setup bleibt der Apache-Host aktiv, aber das Shopware-Projekt liegt im separaten Webroot `/var/www/shopware`:
 
 ```bash
-sudo mkdir -p /var/www/vps.projectvision.de
-sudo chown -R $USER:$USER /var/www/vps.projectvision.de
+sudo mkdir -p /var/www/shopware
+sudo chown -R $USER:$USER /var/www/shopware
 ```
 
 ### 5) Shopware herunterladen
@@ -100,33 +100,21 @@ Die bevorzugte Installationsweise ist der offizielle Shopware-Download oder das 
 Beispiel mit Composer:
 
 ```bash
-cd /var/www/vps.projectvision.de
+cd /var/www/shopware
 composer create-project shopware/platform .
 ```
 
 Falls der genaue Shopware-Release aus einem Download-Archiv stammt:
 
 ```bash
-cd /var/www/vps.projectvision.de
+cd /var/www/shopware
 sudo unzip shopware-*.zip
-sudo chown -R www-data:www-data /var/www/vps.projectvision.de
+sudo chown -R www-data:www-data /var/www/shopware
 ```
 
-### 6) Vorhandene Apache-Host-Konfiguration nutzen
+### 6) Vorhandene Apache-Host-Konfiguration mit eigenem Webroot nutzen
 
-Auf deinem Server läuft Apache bereits. Die vorhandenen Hosts zeigen bereits auf:
-
-```text
-/var/www/vps.projectvision.de
-```
-
-Die vorhandene Hostdatei ist bereits aktiv:
-
-```text
-/etc/apache2/sites-enabled/vps.projectvision.de.conf
-```
-
-Die Shopware-Anwendung muss jetzt in dieses bestehende Webroot installiert werden, damit der Host automatisch auf `public` zeigt.
+Auf deinem Server läuft Apache bereits. Der vorhandene Host bleibt unverändert bestehen, aber wir verwenden als Shopware-Webroot das separates Verzeichnis `/var/www/shopware`.
 
 Prüfen:
 
@@ -135,7 +123,18 @@ sudo apache2ctl -S
 sudo grep -n "DocumentRoot" /etc/apache2/sites-enabled/vps.projectvision.de.conf
 ```
 
-Wenn das DocumentRoot korrekt auf `/var/www/vps.projectvision.de` zeigt, brauchen wir keine neue Apache-Installation und keine neue VHost-Datei. Nur das Shopware-Projekt wird in diesem Verzeichnis installiert.
+Wenn der aktive Host selbst noch auf `/var/www/vps.projectvision.de` zeigt, müssen wir ihn nur so anpassen, dass er auf `/var/www/shopware` zeigt. Das ist die einzige Apache-Änderung, keine Neuinstallation.
+
+Beispiel für die Anpassung:
+
+```apache
+DocumentRoot /var/www/shopware
+<Directory /var/www/shopware>
+    Options FollowSymLinks
+    AllowOverride All
+    Require all granted
+</Directory>
+```
 
 ### 7) PHP-FPM konfigurieren
 
@@ -149,10 +148,10 @@ sudo systemctl status php8.3-fpm
 ### 8) Dateirechte setzen
 
 ```bash
-sudo chown -R www-data:www-data /var/www/vps.projectvision.de
-sudo find /var/www/vps.projectvision.de -type d -exec chmod 755 {} \;
-sudo find /var/www/vps.projectvision.de -type f -exec chmod 644 {} \;
-sudo chmod -R 775 /var/www/vps.projectvision.de/var /var/www/vps.projectvision.de/public/media /var/www/vps.projectvision.de/files /var/www/vps.projectvision.de/config
+sudo chown -R www-data:www-data /var/www/shopware
+sudo find /var/www/shopware -type d -exec chmod 755 {} \;
+sudo find /var/www/shopware -type f -exec chmod 644 {} \;
+sudo chmod -R 775 /var/www/shopware/var /var/www/shopware/public/media /var/www/shopware/files /var/www/shopware/config
 ```
 
 ### 9) Shopware-Installer starten
@@ -196,7 +195,7 @@ custom/plugins/<Name>
 
 ## Projektstruktur
 
-Dieses Repository dient vor allem als Setup-Dokumentation und Automatisierungsbasis. Für die eigentliche Shopware-Installation wird der Code auf dem Ubuntu-Server in `/var/www/vps.projectvision.de` abgelegt und dort über den vorhandenen Apache-Host ausgeliefert.
+Dieses Repository dient vor allem als Setup-Dokumentation und Automatisierungsbasis. Für die eigentliche Shopware-Installation wird der Code auf dem Ubuntu-Server in `/var/www/shopware` abgelegt und über den vorhandenen Apache-Host ausgeliefert.
 
 ## Changelog
 

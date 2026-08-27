@@ -1,0 +1,18 @@
+{
+    "name": "custom/guest-price-visibility",
+    "description": "Hides storefront prices for unauthenticated customers.",
+    "type": "shopware-platform-plugin",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "GuestPriceVisibility\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "GuestPriceVisibility\\GuestPriceVisibility",
+        "label": {
+            "en-GB": "Guest Price Visibility",
+            "de-DE": "Preisanzeige fuer Gaeste"
+        }
+    }
+}
